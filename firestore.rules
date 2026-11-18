@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// Règles de sécurité Firestore pour Split.
+// Seules les deux personnes d'un foyer peuvent lire et écrire ses données.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMember(hid) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/households/$(hid)).data.memberIds;
+    }
+
+    // Profil : chacun ne voit et ne modifie que le sien.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Codes d'invitation : lisibles par toute personne connectée qui connaît le code.
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    match /households/{hid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+      allow create: if signedIn() && request.resource.data.memberIds == [request.auth.uid];
+      // Un membre peut modifier le foyer, sans changer la liste des membres.
+      allow update: if signedIn() && request.auth.uid in resource.data.memberIds
+                    && request.resource.data.memberIds == resource.data.memberIds;
+      // Rejoindre : une seule personne peut s'ajouter, à un foyer qui n'a qu'un membre.
+      allow update: if signedIn()
+                    && resource.data.memberIds.size() == 1
+                    && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members']);
+
+      match /expenses/{id} {
+        allow read, write: if isMember(hid);
+      }
+      match /settlements/{id} {
+        allow read, create: if isMember(hid);
+        allow update, delete: if false;
+      }
+    }
+  }
+}
