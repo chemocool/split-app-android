@@ -11,11 +11,13 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 
@@ -34,9 +36,18 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
     private fun expensesRef(hid: String) = households().document(hid).collection("expenses")
     private fun settlementsRef(hid: String) = households().document(hid).collection("settlements")
 
-    fun householdIdOf(uid: String): Flow<String?> = listen(
-        { cb -> db.collection("users").document(uid).addSnapshotListener { s, e -> cb(s, e) } },
-    ) { it?.getString("householdId") }
+    /**
+     * Les snapshots locaux qui contiennent encore une écriture non confirmée par le serveur sont ignorés.
+     * Sinon on lirait le foyer avant qu'il existe côté serveur, et les règles de sécurité refuseraient la lecture.
+     */
+    fun householdIdOf(uid: String): Flow<String?> = callbackFlow {
+        val reg = db.collection("users").document(uid)
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snap, err ->
+                if (err != null) { close(err); return@addSnapshotListener }
+                if (snap != null && !snap.metadata.hasPendingWrites()) trySend(snap.getString("householdId"))
+            }
+        awaitClose { reg.remove() }
+    }.distinctUntilChanged()
 
     fun household(hid: String): Flow<Household?> = listen(
         { cb -> households().document(hid).addSnapshotListener { s, e -> cb(s, e) } },

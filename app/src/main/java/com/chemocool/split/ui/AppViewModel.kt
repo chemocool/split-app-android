@@ -18,6 +18,7 @@ import com.chemocool.split.domain.SplitMode
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -66,7 +67,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<LocalSettings> =
         settingsStore.settings.stateIn(viewModelScope, SharingStarted.Eagerly, LocalSettings())
 
-    val state: StateFlow<AppState> =
+    private val retryTrigger = MutableStateFlow(0)
+
+    /** Relance la synchronisation après une erreur. */
+    fun retry() { retryTrigger.value += 1 }
+
+    private fun stateFlow(): Flow<AppState> =
         (if (!configured) flowOf(AppState.NotConfigured) else auth.authState.flatMapLatest { user ->
             if (user == null) flowOf(AppState.SignedOut)
             else repo.householdIdOf(user.uid).flatMapLatest { hid ->
@@ -81,8 +87,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }
-        })
-            .catch { emit(AppState.Failed(it.localizedMessage ?: "Erreur de synchronisation")) }
+        }).catch { emit(AppState.Failed(it.localizedMessage ?: "Erreur de synchronisation")) }
+
+    val state: StateFlow<AppState> =
+        retryTrigger.flatMapLatest { stateFlow() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppState.Loading)
 
     private fun ready(): AppState.Ready? = state.value as? AppState.Ready

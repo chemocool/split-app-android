@@ -94,7 +94,7 @@ fun SplitApp(vm: AppViewModel, activity: Activity) {
                     OnboardingScreen(busy, vm::createHousehold, vm::joinHousehold, vm::signOut)
                 }
             }
-            is AppState.Failed -> MessageScreen("Synchronisation impossible", s.message)
+            is AppState.Failed -> MessageScreen("Synchronisation impossible", s.message, onRetry = vm::retry)
             is AppState.Ready -> ReadyApp(s, vm, busy, snackbar)
         }
     }
