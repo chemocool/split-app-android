@@ -130,6 +130,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         ready()?.let { repo.updateHousehold(it.household.id, defaultSplit = mode) }
     }
 
+    fun addTestPartner() = run("Partenaire de test ajouté") {
+        ready()?.let { repo.enableTestPartner(it.household.id) }
+    }
+
+    fun removeTestPartner() = run("Partenaire de test retiré") {
+        ready()?.let { repo.disableTestPartner(it.household.id) }
+    }
+
     fun renameHousehold(name: String) = run {
         ready()?.let { repo.updateHousehold(it.household.id, name = name) }
     }

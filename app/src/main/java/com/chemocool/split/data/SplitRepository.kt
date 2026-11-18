@@ -5,6 +5,7 @@ import com.chemocool.split.domain.Expense
 import com.chemocool.split.domain.Household
 import com.chemocool.split.domain.Member
 import com.chemocool.split.domain.Settlement
+import com.chemocool.split.domain.TEST_PARTNER_UID
 import com.chemocool.split.domain.SplitMode
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.DocumentSnapshot
@@ -119,6 +120,22 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
         if (changes.isNotEmpty()) households().document(hid).update(changes).await()
     }
 
+    suspend fun enableTestPartner(hid: String) {
+        households().document(hid).update("testPartner", mapOf("name" to "Alexandra (test)")).await()
+    }
+
+    /** Retire le partenaire de test et efface toutes les dépenses et tous les virements (ce sont des données de test). */
+    suspend fun disableTestPartner(hid: String) {
+        val expenses = expensesRef(hid).get().await().documents
+        val settlements = settlementsRef(hid).get().await().documents
+        (expenses + settlements).chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it.reference) }
+            batch.commit().await()
+        }
+        households().document(hid).update("testPartner", FieldValue.delete()).await()
+    }
+
     suspend fun addExpense(hid: String, e: Expense) {
         expensesRef(hid).add(
             mapOf(
@@ -174,13 +191,18 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
         if (!exists()) return null
         val ids = get("memberIds") as? List<String> ?: emptyList()
         val members = get("members") as? Map<String, Map<String, Any?>> ?: emptyMap()
+        val realMembers = ids.map { uid ->
+            val m = members[uid].orEmpty()
+            Member(uid, m["name"] as? String ?: "?", m["email"] as? String ?: "", m["photoUrl"] as? String)
+        }
+        // Le partenaire de test disparaît dès qu'un vrai partenaire rejoint le foyer.
+        val testName = (get("testPartner") as? Map<String, Any?>)?.get("name") as? String
+        val useTest = testName != null && realMembers.size == 1
         return Household(
             id = id,
             name = getString("name").orEmpty(),
-            members = ids.map { uid ->
-                val m = members[uid].orEmpty()
-                Member(uid, m["name"] as? String ?: "?", m["email"] as? String ?: "", m["photoUrl"] as? String)
-            },
+            members = if (useTest) realMembers + Member(TEST_PARTNER_UID, testName!!) else realMembers,
+            testPartnerUid = if (useTest) TEST_PARTNER_UID else null,
             inviteCode = getString("inviteCode").orEmpty(),
             defaultSplit = runCatching { SplitMode.valueOf(getString("defaultSplit")!!) }.getOrDefault(SplitMode.EQUAL),
             currency = getString("currency") ?: "CAD",

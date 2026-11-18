@@ -162,6 +162,8 @@ private fun ReadyApp(state: AppState.Ready, vm: AppViewModel, busy: Boolean, sna
                     onNotifyNewExpense = { vm.setNotifyNewExpense(it) },
                     onNotifyMonthly = { vm.setNotifyMonthly(it) },
                     onMessage = vm::showMessage,
+                    onAddTestPartner = vm::addTestPartner,
+                    onRemoveTestPartner = vm::removeTestPartner,
                     onSignOut = vm::signOut,
                 )
             }
