@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
+.kotlin/
+# Config Firebase propre à chaque développeur : ne jamais la versionner
+google-services.json
+*.jks
+*.keystore
