@@ -149,6 +149,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onDone()
     }
 
+    fun updateExpense(expense: Expense, onDone: () -> Unit) = run("Dépense modifiée") {
+        val r = ready() ?: return@run
+        repo.updateExpense(r.household.id, expense)
+        onDone()
+    }
+
     fun deleteExpense(expense: Expense) = run("Dépense supprimée") {
         val r = ready() ?: return@run
         repo.deleteExpense(r.household.id, expense.id)

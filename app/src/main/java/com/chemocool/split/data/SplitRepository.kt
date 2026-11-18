@@ -152,6 +152,22 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
         ).await()
     }
 
+    /** Modifie une dépense existante. La date de création (et donc l'ordre dans la liste) ne change pas. */
+    suspend fun updateExpense(hid: String, e: Expense) {
+        expensesRef(hid).document(e.id).update(
+            mapOf(
+                "description" to e.description,
+                "amountCents" to e.amountCents,
+                "category" to e.category.name,
+                "date" to e.date.toString(),
+                "note" to e.note,
+                "paidBy" to e.paidBy,
+                "splitMode" to e.splitMode.name,
+                "shares" to e.shares,
+            ),
+        ).await()
+    }
+
     suspend fun deleteExpense(hid: String, expenseId: String) {
         expensesRef(hid).document(expenseId).delete().await()
     }
