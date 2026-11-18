@@ -73,18 +73,29 @@ import java.time.ZoneOffset
 /** Écrans 03 à 05 : Nouvelle dépense (partage Égal / En $ / Totalité). */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AddExpenseScreen(state: AppState.Ready, busy: Boolean, onClose: () -> Unit, onSave: (Expense) -> Unit) {
+fun AddExpenseScreen(
+    state: AppState.Ready,
+    busy: Boolean,
+    onClose: () -> Unit,
+    /** Dépense à modifier. Null pour une nouvelle dépense. */
+    initial: Expense? = null,
+    onSave: (Expense) -> Unit,
+) {
     val me = state.me
     val partner = state.partner ?: return
-    var description by rememberSaveable { mutableStateOf("") }
-    var amountText by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf(Category.GROCERIES) }
-    var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    var note by rememberSaveable { mutableStateOf("") }
-    var showNote by rememberSaveable { mutableStateOf(false) }
-    var payerUid by rememberSaveable { mutableStateOf(me.uid) }
-    var mode by rememberSaveable { mutableStateOf(state.household.defaultSplit) }
-    var otherAmountText by rememberSaveable { mutableStateOf("") }
+    val editing = initial != null
+    val initialOtherShare = initial?.let { e -> e.shares.entries.firstOrNull { it.key != e.paidBy }?.value }
+    var description by rememberSaveable { mutableStateOf(initial?.description ?: "") }
+    var amountText by rememberSaveable { mutableStateOf(initial?.let { Money.formatInput(it.amountCents) } ?: "") }
+    var category by rememberSaveable { mutableStateOf(initial?.category ?: Category.GROCERIES) }
+    var date by rememberSaveable { mutableStateOf(initial?.date ?: LocalDate.now()) }
+    var note by rememberSaveable { mutableStateOf(initial?.note ?: "") }
+    var showNote by rememberSaveable { mutableStateOf(initial?.note?.isNotBlank() == true) }
+    var payerUid by rememberSaveable { mutableStateOf(initial?.paidBy ?: me.uid) }
+    var mode by rememberSaveable { mutableStateOf(initial?.splitMode ?: state.household.defaultSplit) }
+    var otherAmountText by rememberSaveable {
+        mutableStateOf(if (initial?.splitMode == SplitMode.AMOUNT && initialOtherShare != null) Money.formatInput(initialOtherShare) else "")
+    }
     var showDatePicker by remember { mutableStateOf(false) }
 
     val amount = Money.parse(amountText)
@@ -97,12 +108,14 @@ fun AddExpenseScreen(state: AppState.Ready, busy: Boolean, onClose: () -> Unit, 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nouvelle dépense") },
+                title = { Text(if (editing) "Modifier la dépense" else "Nouvelle dépense") },
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Fermer") } },
                 actions = {
                     TextButton(enabled = canSave, onClick = {
                         onSave(
                             Expense(
+                                id = initial?.id.orEmpty(),
+                                createdAtMillis = initial?.createdAtMillis ?: 0,
                                 description = description.trim(),
                                 amountCents = amount!!,
                                 category = category,

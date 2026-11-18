@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -108,6 +109,7 @@ private fun ReadyApp(state: AppState.Ready, vm: AppViewModel, busy: Boolean, sna
     val settings by vm.settings.collectAsStateWithLifecycle()
     var showSettle by remember { mutableStateOf(false) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
+    var editingExpense by remember { mutableStateOf<Expense?>(null) }
     val inTabs = route != ADD_ROUTE
 
     Scaffold(
@@ -136,7 +138,7 @@ private fun ReadyApp(state: AppState.Ready, vm: AppViewModel, busy: Boolean, sna
         floatingActionButton = {
             if (inTabs && (route == Tab.HOME.route || route == Tab.ACTIVITY.route) && state.partner != null) {
                 ExtendedFloatingActionButton(
-                    onClick = { nav.navigate(ADD_ROUTE) },
+                    onClick = { editingExpense = null; nav.navigate(ADD_ROUTE) },
                     icon = { Icon(Icons.Outlined.Add, null) },
                     text = { Text("Nouvelle dépense") },
                 )
@@ -168,8 +170,9 @@ private fun ReadyApp(state: AppState.Ready, vm: AppViewModel, busy: Boolean, sna
                 )
             }
             composable(ADD_ROUTE) {
-                AddExpenseScreen(state, busy, onClose = { nav.popBackStack() }) { expense ->
-                    vm.addExpense(expense) { nav.popBackStack() }
+                AddExpenseScreen(state, busy, onClose = { nav.popBackStack() }, initial = editingExpense) { expense ->
+                    if (editingExpense != null) vm.updateExpense(expense) { nav.popBackStack() }
+                    else vm.addExpense(expense) { nav.popBackStack() }
                 }
             }
         }
@@ -197,7 +200,16 @@ private fun ReadyApp(state: AppState.Ready, vm: AppViewModel, busy: Boolean, sna
                     if (e.note.isNotBlank()) Text("Note : ${e.note}")
                 }
             },
-            confirmButton = { TextButton(onClick = { selectedExpense = null }) { Text("Fermer") } },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = { selectedExpense = null }) { Text("Fermer") }
+                    TextButton(onClick = {
+                        editingExpense = e
+                        selectedExpense = null
+                        nav.navigate(ADD_ROUTE)
+                    }) { Text("Modifier") }
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { vm.deleteExpense(e); selectedExpense = null }) {
                     Text("Supprimer", color = MaterialTheme.colorScheme.error)
