@@ -123,7 +123,7 @@ fun OnboardingScreen(busy: Boolean, onCreate: (String) -> Unit, onJoin: (String)
 }
 
 @Composable
-fun MessageScreen(title: String, body: String) {
+fun MessageScreen(title: String, body: String, onRetry: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxSize().systemBarsPadding().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -134,5 +134,9 @@ fun MessageScreen(title: String, body: String) {
         Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        if (onRetry != null) {
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onRetry) { Text("Réessayer") }
+        }
     }
 }

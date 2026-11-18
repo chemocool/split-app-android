@@ -94,7 +94,7 @@ fun SplitApp(vm: AppViewModel, activity: Activity) {
                     OnboardingScreen(busy, vm::createHousehold, vm::joinHousehold, vm::signOut)
                 }
             }
-            is AppState.Failed -> MessageScreen("Synchronisation impossible", s.message)
+            is AppState.Failed -> MessageScreen("Synchronisation impossible", s.message, onRetry = vm::retry)
             is AppState.Ready -> ReadyApp(s, vm, busy, snackbar)
         }
     }
@@ -162,6 +162,8 @@ private fun ReadyApp(state: AppState.Ready, vm: AppViewModel, busy: Boolean, sna
                     onNotifyNewExpense = { vm.setNotifyNewExpense(it) },
                     onNotifyMonthly = { vm.setNotifyMonthly(it) },
                     onMessage = vm::showMessage,
+                    onAddTestPartner = vm::addTestPartner,
+                    onRemoveTestPartner = vm::removeTestPartner,
                     onSignOut = vm::signOut,
                 )
             }

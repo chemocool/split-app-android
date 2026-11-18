@@ -5,17 +5,20 @@ import com.chemocool.split.domain.Expense
 import com.chemocool.split.domain.Household
 import com.chemocool.split.domain.Member
 import com.chemocool.split.domain.Settlement
+import com.chemocool.split.domain.TEST_PARTNER_UID
 import com.chemocool.split.domain.SplitMode
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 
@@ -34,9 +37,18 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
     private fun expensesRef(hid: String) = households().document(hid).collection("expenses")
     private fun settlementsRef(hid: String) = households().document(hid).collection("settlements")
 
-    fun householdIdOf(uid: String): Flow<String?> = listen(
-        { cb -> db.collection("users").document(uid).addSnapshotListener { s, e -> cb(s, e) } },
-    ) { it?.getString("householdId") }
+    /**
+     * Les snapshots locaux qui contiennent encore une écriture non confirmée par le serveur sont ignorés.
+     * Sinon on lirait le foyer avant qu'il existe côté serveur, et les règles de sécurité refuseraient la lecture.
+     */
+    fun householdIdOf(uid: String): Flow<String?> = callbackFlow {
+        val reg = db.collection("users").document(uid)
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snap, err ->
+                if (err != null) { close(err); return@addSnapshotListener }
+                if (snap != null && !snap.metadata.hasPendingWrites()) trySend(snap.getString("householdId"))
+            }
+        awaitClose { reg.remove() }
+    }.distinctUntilChanged()
 
     fun household(hid: String): Flow<Household?> = listen(
         { cb -> households().document(hid).addSnapshotListener { s, e -> cb(s, e) } },
@@ -108,6 +120,22 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
         if (changes.isNotEmpty()) households().document(hid).update(changes).await()
     }
 
+    suspend fun enableTestPartner(hid: String) {
+        households().document(hid).update("testPartner", mapOf("name" to "Alexandra (test)")).await()
+    }
+
+    /** Retire le partenaire de test et efface toutes les dépenses et tous les virements (ce sont des données de test). */
+    suspend fun disableTestPartner(hid: String) {
+        val expenses = expensesRef(hid).get().await().documents
+        val settlements = settlementsRef(hid).get().await().documents
+        (expenses + settlements).chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it.reference) }
+            batch.commit().await()
+        }
+        households().document(hid).update("testPartner", FieldValue.delete()).await()
+    }
+
     suspend fun addExpense(hid: String, e: Expense) {
         expensesRef(hid).add(
             mapOf(
@@ -163,13 +191,18 @@ class SplitRepository(private val db: FirebaseFirestore = FirebaseFirestore.getI
         if (!exists()) return null
         val ids = get("memberIds") as? List<String> ?: emptyList()
         val members = get("members") as? Map<String, Map<String, Any?>> ?: emptyMap()
+        val realMembers = ids.map { uid ->
+            val m = members[uid].orEmpty()
+            Member(uid, m["name"] as? String ?: "?", m["email"] as? String ?: "", m["photoUrl"] as? String)
+        }
+        // Le partenaire de test disparaît dès qu'un vrai partenaire rejoint le foyer.
+        val testName = (get("testPartner") as? Map<String, Any?>)?.get("name") as? String
+        val useTest = testName != null && realMembers.size == 1
         return Household(
             id = id,
             name = getString("name").orEmpty(),
-            members = ids.map { uid ->
-                val m = members[uid].orEmpty()
-                Member(uid, m["name"] as? String ?: "?", m["email"] as? String ?: "", m["photoUrl"] as? String)
-            },
+            members = if (useTest) realMembers + Member(TEST_PARTNER_UID, testName!!) else realMembers,
+            testPartnerUid = if (useTest) TEST_PARTNER_UID else null,
             inviteCode = getString("inviteCode").orEmpty(),
             defaultSplit = runCatching { SplitMode.valueOf(getString("defaultSplit")!!) }.getOrDefault(SplitMode.EQUAL),
             currency = getString("currency") ?: "CAD",

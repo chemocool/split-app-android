@@ -65,6 +65,8 @@ data class Settlement(
     val createdAtMillis: Long = 0,
 )
 
+const val TEST_PARTNER_UID = "test-partner"
+
 data class Household(
     val id: String,
     val name: String,
@@ -72,6 +74,8 @@ data class Household(
     val inviteCode: String,
     val defaultSplit: SplitMode = SplitMode.EQUAL,
     val currency: String = "CAD",
+    /** Partenaire fictif pour essayer l'app seul. Null si absent ou si un vrai partenaire a rejoint. */
+    val testPartnerUid: String? = null,
 ) {
     fun partnerOf(uid: String): Member? = members.firstOrNull { it.uid != uid }
     fun member(uid: String): Member? = members.firstOrNull { it.uid == uid }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -64,6 +65,8 @@ fun SettingsScreen(
     onNotifyNewExpense: (Boolean) -> Unit,
     onNotifyMonthly: (Boolean) -> Unit,
     onMessage: (String) -> Unit,
+    onAddTestPartner: () -> Unit,
+    onRemoveTestPartner: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -72,6 +75,8 @@ fun SettingsScreen(
     var renaming by remember { mutableStateOf(false) }
     var splitMenu by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
+    var confirmRemoveTest by remember { mutableStateOf(false) }
+    val hasTestPartner = state.household.testPartnerUid != null
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) {
@@ -134,6 +139,22 @@ fun SettingsScreen(
             )
         }
 
+        if (partner == null) {
+            ListItem(
+                modifier = Modifier.tappable { onAddTestPartner() },
+                leadingContent = { Icon(Icons.Outlined.Science, null) },
+                headlineContent = { Text("Ajouter un partenaire de test") },
+                supportingContent = { Text("Pour essayer l'app seul, en attendant que votre partenaire rejoigne") },
+            )
+        } else if (hasTestPartner) {
+            ListItem(
+                modifier = Modifier.tappable { confirmRemoveTest = true },
+                leadingContent = { Icon(Icons.Outlined.Science, null) },
+                headlineContent = { Text("Retirer le partenaire de test") },
+                supportingContent = { Text("Efface aussi les dépenses de test") },
+            )
+        }
+
         SectionTitle("Notifications")
         ListItem(
             headlineContent = { Text("Nouvelle dépense") },
@@ -182,6 +203,19 @@ fun SettingsScreen(
                 TextButton(enabled = name.isNotBlank(), onClick = { onRenameHousehold(name.trim()); renaming = false }) { Text("Enregistrer") }
             },
             dismissButton = { TextButton(onClick = { renaming = false }) { Text("Annuler") } },
+        )
+    }
+    if (confirmRemoveTest) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoveTest = false },
+            title = { Text("Retirer le partenaire de test ?") },
+            text = { Text("Toutes les dépenses et tous les virements du foyer seront effacés. C'est irréversible.") },
+            confirmButton = {
+                TextButton(onClick = { confirmRemoveTest = false; onRemoveTestPartner() }) {
+                    Text("Retirer et effacer", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemoveTest = false }) { Text("Annuler") } },
         )
     }
     if (confirmSignOut) {
